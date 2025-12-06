@@ -48,38 +48,44 @@ def get_sp500_it_tickers():
 # ---------------------------------------------------------
 def download_stock_data(tickers, start_date, end_date):
     """
-    여러 종목의 주가 데이터를 다운로드합니다.
+    yf.download()를 사용하여 여러 종목의 주가 데이터를 한 번에 다운로드합니다.
 
     Returns:
         dict: {ticker: DataFrame} 형태
     """
     print(f"\n주가 데이터 다운로드 중... ({start_date} ~ {end_date})")
+    print(f"총 {len(tickers)}개 종목을 한 번에 다운로드합니다...")
+
+    # yf.download()로 모든 종목 한 번에 다운로드
+    all_data = yf.download(tickers, start=start_date, end=end_date, group_by='ticker', threads=True)
 
     stock_data = {}
     failed_tickers = []
 
-    for i, ticker in enumerate(tickers):
+    for ticker in tickers:
         try:
-            stock = yf.Ticker(ticker)
-            hist = stock.history(start=start_date, end=end_date)
+            # 멀티 종목 다운로드 시 ticker로 접근
+            if len(tickers) == 1:
+                hist = all_data.copy()
+            else:
+                hist = all_data[ticker].copy()
+
+            # NaN 행 제거
+            hist = hist.dropna()
 
             if len(hist) > 100:  # 최소 100일 이상 데이터가 있는 종목만
                 # 5일 이동평균 추가
                 hist['MA5'] = hist['Close'].rolling(window=5).mean()
                 hist = hist.dropna()
                 stock_data[ticker] = hist
-                print(f"  [{i+1}/{len(tickers)}] {ticker}: {len(hist)} 거래일 ✓")
+                print(f"  {ticker}: {len(hist)} 거래일 OK")
             else:
-                print(f"  [{i+1}/{len(tickers)}] {ticker}: 데이터 부족 (skip)")
+                print(f"  {ticker}: 데이터 부족 (skip)")
                 failed_tickers.append(ticker)
 
         except Exception as e:
-            print(f"  [{i+1}/{len(tickers)}] {ticker}: 에러 - {str(e)[:50]}")
+            print(f"  {ticker}: 에러 - {str(e)[:50]}")
             failed_tickers.append(ticker)
-
-        # API 제한 방지
-        if (i + 1) % 10 == 0:
-            time.sleep(1)
 
     print(f"\n주가 데이터 수집 완료: {len(stock_data)}개 종목")
     if failed_tickers:
